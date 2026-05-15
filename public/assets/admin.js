@@ -250,8 +250,22 @@
       }
     }
 
-    // Upload form — client-side Vercel Blob upload (bypasses Vercel's 4.5 MB body limit)
+    // Show a warning banner if Vercel Blob storage is not configured
     const uploadForm = document.getElementById('uploadForm');
+    const blobConfigured = D.blobConfigured !== false; // default true if not present
+    if (!blobConfigured && uploadForm) {
+      const warn = document.createElement('div');
+      warn.className = 'info-card no-book';
+      warn.style.marginBottom = '1rem';
+      warn.innerHTML = `${ICO.warn} <span><strong>Blob storage not configured.</strong>
+        Go to <a href="https://vercel.com/dashboard" target="_blank" rel="noopener" style="color:var(--gold)">
+        Vercel Dashboard → Storage</a>, create a <strong>Blob</strong> store, and connect it to this project.
+        Then redeploy. Uploads will not work until <code>BLOB_READ_WRITE_TOKEN</code> is set.</span>`;
+      uploadForm.parentNode.insertBefore(warn, uploadForm);
+      uploadForm.querySelector('button[type=submit]').disabled = true;
+    }
+
+    // Upload form — client-side Vercel Blob upload (bypasses Vercel's 4.5 MB body limit)
     if (uploadForm) {
       uploadForm.addEventListener('submit', async e => {
         e.preventDefault();
@@ -273,6 +287,26 @@
         if (progressWrap) progressWrap.style.display = 'flex';
 
         try {
+          // First: verify the server can issue a blob token (surfaces config errors clearly)
+          const preCheck = await fetch('/admin/book/upload', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({
+              type:    'blob.generate-client-token',
+              payload: {
+                pathname:    `books/${Date.now()}-check`,
+                callbackUrl: location.origin + '/admin/book/upload',
+                multipart:   false,
+                clientPayload: file.name,
+              },
+            }),
+          });
+
+          if (!preCheck.ok) {
+            const errData = await preCheck.json().catch(() => ({}));
+            throw new Error(errData.error || `Server error ${preCheck.status} — check Vercel environment variables.`);
+          }
+
           // Dynamically load @vercel/blob client library (bundled ESM from CDN)
           let blobClient;
           try {
@@ -289,7 +323,7 @@
           const blob = await blobClient.upload(safeName, file, {
             access:            'public',
             handleUploadUrl:   '/admin/book/upload',
-            clientPayload:     file.name,   // passed through to onUploadCompleted as tokenPayload
+            clientPayload:     file.name,
             onUploadProgress:  ({ percentage }) => {
               const pct = Math.round(percentage);
               if (progressFill)  progressFill.style.width  = pct + '%';
@@ -303,7 +337,12 @@
 
         } catch (err) {
           console.error('[Upload] error:', err);
-          toast('Upload failed: ' + (err.message || 'Unknown error'), 'error');
+          // Translate the cryptic library error into a helpful message
+          let msg = err.message || 'Unknown error';
+          if (msg.includes('Failed to retrieve the client token')) {
+            msg = 'Blob storage not configured. Create a Blob store in Vercel Dashboard → Storage and connect it to this project, then redeploy.';
+          }
+          toast('Upload failed: ' + msg, 'error');
           setLoading(btn, false);
           if (progressWrap) progressWrap.style.display = 'none';
         }

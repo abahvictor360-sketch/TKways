@@ -110,7 +110,8 @@ router.get('/', async (req, res) => {
       priceUsdCents:    payment?.price_usd_cents || 1999,
       stripeConfigured: !!(payment?.stripe_publishable_key && payment?.stripe_secret_key)
     },
-    username: req.adminUsername
+    username:       req.adminUsername,
+    blobConfigured: !!process.env.BLOB_READ_WRITE_TOKEN
   };
 
   const siteUrl = process.env.SITE_URL || `https://${req.headers.host}`;
