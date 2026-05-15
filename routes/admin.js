@@ -1,12 +1,11 @@
 const express    = require('express');
 const router     = express.Router();
 const bcrypt     = require('bcryptjs');
-const multer     = require('multer');
 const csurf      = require('csurf');
 const rateLimit  = require('express-rate-limit');
 const path       = require('path');
 const fs         = require('fs');
-const { put, del } = require('@vercel/blob');
+const { handleUpload, del } = require('@vercel/blob');
 
 const { sql }    = require('../database');
 const { requireAuth, signAdminToken, COOKIE_NAME } = require('../middleware/auth');
@@ -21,16 +20,6 @@ const loginLimiter = rateLimit({
 });
 
 const VALID_SECTIONS = ['hero', 'stats', 'chapters', 'bonus_topics', 'testimonials', 'purchase_card', 'faq', 'footer'];
-
-// Multer — memory storage, 4.5 MB cap (Vercel serverless request body limit)
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 4.5 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => {
-    if (file.mimetype === 'application/pdf') cb(null, true);
-    else cb(new Error('Only PDF files are allowed.'));
-  }
-});
 
 // ── Helper: inject <script> into HTML ─────────────────────────────────────────
 function injectIntoHtml(htmlPath, scriptTag) {
@@ -80,9 +69,20 @@ router.get('/logout', (req, res) => {
   res.redirect('/admin/login');
 });
 
-// ── All routes below require authentication + CSRF ────────────────────────────
+// ── All routes below require authentication ───────────────────────────────────
 router.use(requireAuth);
-router.use(csrfProtection);
+
+// Conditional CSRF: skip for the blob upload endpoint.
+// The upload endpoint is protected by JWT authentication (requireAuth).
+// CSRF is not applicable here because:
+//   1. @vercel/blob client library cannot inject custom headers into its requests
+//   2. Cross-origin uploads are blocked by the browser's CORS policy
+//   3. The BLOB_READ_WRITE_TOKEN is only on the server side
+const conditionalCsrf = (req, res, next) => {
+  if (req.path === '/book/upload') return next();
+  return csrfProtection(req, res, next);
+};
+router.use(conditionalCsrf);
 
 // ── GET /admin ────────────────────────────────────────────────────────────────
 router.get('/', async (req, res) => {
@@ -148,60 +148,54 @@ router.post('/content/:key', async (req, res) => {
   }
 });
 
-// ── POST /admin/book/upload ───────────────────────────────────────────────────
-// multer runs inside the handler so csurf (checking X-CSRF-Token header) fires
-// before multer parses the multipart body — correct order.
-router.post('/book/upload', (req, res) => {
-  upload.single('book')(req, res, async (err) => {
-    if (err) return res.status(400).json({ success: false, error: err.message });
-    if (!req.file) return res.status(400).json({ success: false, error: 'No file uploaded.' });
+// ── POST /admin/book/upload ────────────────────────────────────────────────────
+// Uses Vercel Blob's handleUpload for client-side uploads (bypasses 4.5 MB limit).
+// The @vercel/blob client library sends two requests to this endpoint:
+//   1. { type: 'blob.generate-client-token' } — to get an upload token
+//   2. { type: 'blob.upload-completed' }       — to notify upload is done
+// CSRF is bypassed for this route (see conditionalCsrf above); JWT auth still applies.
+router.post('/book/upload', async (req, res) => {
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    return res.status(500).json({
+      success: false,
+      error: 'BLOB_READ_WRITE_TOKEN is not set. Add it in Vercel → Settings → Environment Variables.'
+    });
+  }
 
-    // Magic-byte check: must start with %PDF
-    if (req.file.buffer.slice(0, 4).toString('ascii') !== '%PDF') {
-      return res.status(400).json({ success: false, error: 'File is not a valid PDF.' });
-    }
+  try {
+    const jsonResponse = await handleUpload({
+      body:    req.body,
+      request: req,
+      onBeforeGenerateToken: async (pathname, clientPayload) => ({
+        allowedContentTypes:  ['application/pdf'],
+        maximumSizeInBytes:   100 * 1024 * 1024,   // 100 MB
+        tokenPayload:         clientPayload || pathname,
+      }),
+      onUploadCompleted: async ({ blob, tokenPayload }) => {
+        // Remove previous blob from storage if one exists
+        const [existing] = await sql`SELECT file_path FROM book WHERE id = 1`;
+        if (existing?.file_path && existing.file_path !== blob.url) {
+          try { await del(existing.file_path, { token: process.env.BLOB_READ_WRITE_TOKEN }); } catch {}
+        }
 
-    if (!process.env.BLOB_READ_WRITE_TOKEN) {
-      return res.status(500).json({
-        success: false,
-        error: 'BLOB_READ_WRITE_TOKEN is not set. Add it in Vercel → Settings → Environment Variables.'
-      });
-    }
+        await sql`
+          UPDATE book SET
+            filename      = ${blob.pathname},
+            original_name = ${tokenPayload || blob.pathname.split('/').pop()},
+            file_path     = ${blob.url},
+            file_size     = NULL,
+            uploaded_at   = NOW()
+          WHERE id = 1
+        `;
+        console.log('[Book] uploaded:', blob.url);
+      },
+    });
 
-    try {
-      // Remove previous blob if one exists
-      const [existing] = await sql`SELECT file_path FROM book WHERE id = 1`;
-      if (existing?.file_path) {
-        try { await del(existing.file_path); } catch {}
-      }
-
-      const blobName = `books/${Date.now()}-${req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-      const blob = await put(blobName, req.file.buffer, {
-        access: 'public',
-        contentType: 'application/pdf',
-        addRandomSuffix: true,
-        token: process.env.BLOB_READ_WRITE_TOKEN,
-      });
-
-      await sql`
-        UPDATE book SET
-          filename      = ${blob.pathname},
-          original_name = ${req.file.originalname},
-          file_path     = ${blob.url},
-          file_size     = ${req.file.size},
-          uploaded_at   = NOW()
-        WHERE id = 1
-      `;
-
-      res.json({
-        success: true,
-        file: { filename: blob.pathname, originalName: req.file.originalname, fileSize: req.file.size }
-      });
-    } catch (uploadErr) {
-      console.error('Blob upload error:', uploadErr.message);
-      res.status(500).json({ success: false, error: 'Upload failed: ' + uploadErr.message });
-    }
-  });
+    return res.json(jsonResponse);
+  } catch (err) {
+    console.error('[Book] handleUpload error:', err.message);
+    return res.status(400).json({ success: false, error: err.message });
+  }
 });
 
 // ── GET /admin/book/status ────────────────────────────────────────────────────

@@ -42,7 +42,7 @@ app.use(helmet({
       styleSrc:   ["'self'", "https://fonts.googleapis.com", "'unsafe-inline'"],
       fontSrc:    ["'self'", "https://fonts.gstatic.com"],
       frameSrc:   ["https://js.stripe.com"],
-      connectSrc: ["'self'", "https://api.stripe.com", "https://esm.sh"],
+      connectSrc: ["'self'", "https://api.stripe.com", "https://esm.sh", "https://blob.vercel-storage.com"],
       imgSrc:     ["'self'", "data:", "https:"],
       workerSrc:  ["blob:"]
     }

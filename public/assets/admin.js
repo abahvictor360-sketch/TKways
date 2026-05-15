@@ -250,62 +250,63 @@
       }
     }
 
-    // Upload form — XHR to server, server puts to Vercel Blob
+    // Upload form — client-side Vercel Blob upload (bypasses Vercel's 4.5 MB body limit)
     const uploadForm = document.getElementById('uploadForm');
     if (uploadForm) {
-      uploadForm.addEventListener('submit', e => {
+      uploadForm.addEventListener('submit', async e => {
         e.preventDefault();
         const fileInput = document.getElementById('bookFile');
-        if (!fileInput?.files[0]) return;
+        const file = fileInput?.files?.[0];
+        if (!file) return;
+
+        if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
+          toast('Only PDF files are allowed.', 'error');
+          return;
+        }
 
         const progressWrap  = document.getElementById('uploadProgress');
         const progressFill  = document.getElementById('progressFill');
         const progressLabel = document.getElementById('progressLabel');
-        const btn = uploadForm.querySelector('button[type=submit]');
+        const btn           = uploadForm.querySelector('button[type=submit]');
 
         setLoading(btn, true, 'Uploading…');
         if (progressWrap) progressWrap.style.display = 'flex';
 
-        const fd = new FormData();
-        fd.append('book', fileInput.files[0]);
-
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', '/admin/book/upload');
-        // CSRF token sent as header — csurf reads headers before multer parses body
-        xhr.setRequestHeader('X-CSRF-Token', CSRF);
-
-        xhr.upload.addEventListener('progress', ev => {
-          if (!ev.lengthComputable) return;
-          const pct = Math.round((ev.loaded / ev.total) * 100);
-          if (progressFill)  progressFill.style.width  = pct + '%';
-          if (progressLabel) progressLabel.textContent = pct + '%';
-        });
-
-        xhr.onload = () => {
+        try {
+          // Dynamically load @vercel/blob client library (bundled ESM from CDN)
+          let blobClient;
           try {
-            const data = JSON.parse(xhr.responseText);
-            if (data.success) {
-              toast('Book uploaded successfully!', 'success');
-              setTimeout(() => location.reload(), 900);
-            } else {
-              toast('Upload failed: ' + (data.error || 'Unknown error'), 'error');
-              setLoading(btn, false);
-              if (progressWrap) progressWrap.style.display = 'none';
-            }
+            blobClient = await import('https://esm.sh/@vercel/blob@0.27.3/client');
           } catch {
-            toast('Unexpected server response. Please try again.', 'error');
-            setLoading(btn, false);
-            if (progressWrap) progressWrap.style.display = 'none';
+            throw new Error('Could not load upload library — check your internet connection and try again.');
           }
-        };
 
-        xhr.onerror = () => {
-          toast('Network error — please try again.', 'error');
+          const safeName = `books/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+
+          // Upload directly from the browser to Vercel Blob storage.
+          // handleUpload on the server issues a signed client token, then Vercel Blob
+          // accepts the file directly — our server never touches the binary data.
+          const blob = await blobClient.upload(safeName, file, {
+            access:            'public',
+            handleUploadUrl:   '/admin/book/upload',
+            clientPayload:     file.name,   // passed through to onUploadCompleted as tokenPayload
+            onUploadProgress:  ({ percentage }) => {
+              const pct = Math.round(percentage);
+              if (progressFill)  progressFill.style.width  = pct + '%';
+              if (progressLabel) progressLabel.textContent = pct + '%';
+            },
+          });
+
+          console.log('[Upload] blob stored at:', blob.url);
+          toast('Book uploaded successfully!', 'success');
+          setTimeout(() => location.reload(), 900);
+
+        } catch (err) {
+          console.error('[Upload] error:', err);
+          toast('Upload failed: ' + (err.message || 'Unknown error'), 'error');
           setLoading(btn, false);
           if (progressWrap) progressWrap.style.display = 'none';
-        };
-
-        xhr.send(fd);
+        }
       });
     }
 
