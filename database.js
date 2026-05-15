@@ -1,15 +1,49 @@
-const { neon } = require('@neondatabase/serverless');
-const bcrypt = require('bcryptjs');
+const { Pool } = require('pg');
+const bcrypt    = require('bcryptjs');
 
 if (!process.env.DATABASE_URL) {
-  throw new Error('DATABASE_URL environment variable is required. Add it in Vercel → Settings → Environment Variables.');
+  throw new Error(
+    'DATABASE_URL is not set. ' +
+    'Add it in Vercel → Settings → Environment Variables.'
+  );
 }
 
-const sql = neon(process.env.DATABASE_URL);
+// Single pool — reused across warm invocations; max:1 keeps serverless
+// connection count low while Neon's pooler handles concurrency externally.
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false },
+  max: 1,
+  idleTimeoutMillis:    10_000,
+  connectionTimeoutMillis: 5_000,
+});
 
-// ── Schema + seeds (run once per cold start, idempotent) ─────────────────────
+pool.on('error', err => console.error('[pg] idle client error:', err.message));
+
+// ── sql tagged-template helper ────────────────────────────────────────────────
+// Returns rows[] directly — identical surface API to @neondatabase/serverless
+// so every route file works unchanged.
+//
+//   const [row]  = await sql`SELECT * FROM tbl WHERE id = ${id}`;
+//   const rows   = await sql`SELECT * FROM tbl`;
+//   await sql`INSERT INTO tbl (a) VALUES (${v})`;
+//
+async function sql(strings, ...values) {
+  let text   = '';
+  const params = [];
+  strings.forEach((str, i) => {
+    text += str;
+    if (i < values.length) {
+      params.push(values[i]);
+      text += `$${params.length}`;
+    }
+  });
+  const { rows } = await pool.query(text, params);
+  return rows;
+}
+
+// ── Schema + seeds (idempotent — safe to run on every cold start) ─────────────
 async function initDb() {
-  // Tables
   await sql`
     CREATE TABLE IF NOT EXISTS site_content (
       key        TEXT PRIMARY KEY,
@@ -60,20 +94,17 @@ async function initDb() {
     )
   `;
 
-  // ── Seeds ──────────────────────────────────────────────────────────────────
+  // ── Seeds ────────────────────────────────────────────────────────────────
 
-  // Admin user (only if none exists)
   const [{ count }] = await sql`SELECT COUNT(*)::int AS count FROM admin_users`;
-  if (count === 0) {
+  if (Number(count) === 0) {
     const hash = bcrypt.hashSync('changeme123', 10);
     await sql`INSERT INTO admin_users (username, password_hash) VALUES ('admin', ${hash})`;
   }
 
-  // Singleton rows
   await sql`INSERT INTO payment_settings (id) VALUES (1) ON CONFLICT DO NOTHING`;
   await sql`INSERT INTO book (id) VALUES (1) ON CONFLICT DO NOTHING`;
 
-  // Default landing page content
   const defaults = {
     hero: {
       headline: 'The Ultimate Guide to Buying in Turkey',
@@ -107,9 +138,9 @@ async function initDb() {
     },
     testimonials: {
       items: [
-        { initials: 'SR', name: 'Sarah R.',   location: 'New York, USA',    text: 'Saved me thousands on my apartment purchase. The legal chapter alone was worth 10x the price.' },
-        { initials: 'MK', name: 'Michael K.', location: 'London, UK',       text: 'Finally bought a genuine handmade carpet without getting ripped off. This guide is essential.' },
-        { initials: 'AJ', name: 'Anika J.',   location: 'Toronto, Canada',  text: 'The gold buying section is incredibly detailed. I felt confident walking into any jeweler.' }
+        { initials: 'SR', name: 'Sarah R.',   location: 'New York, USA',   text: 'Saved me thousands on my apartment purchase. The legal chapter alone was worth 10x the price.' },
+        { initials: 'MK', name: 'Michael K.', location: 'London, UK',      text: 'Finally bought a genuine handmade carpet without getting ripped off. This guide is essential.' },
+        { initials: 'AJ', name: 'Anika J.',   location: 'Toronto, Canada', text: 'The gold buying section is incredibly detailed. I felt confident walking into any jeweler.' }
       ]
     },
     purchase_card: {
@@ -126,10 +157,10 @@ async function initDb() {
     },
     faq: {
       items: [
-        { question: 'How do I receive the guide?',              answer: 'Immediately after payment you will be redirected to download your PDF.' },
-        { question: 'Is this guide current?',                   answer: 'Yes — updated for 2024/2025 with the latest pricing, regulations, and vendor recommendations.' },
-        { question: 'What format is the guide?',               answer: 'A high-quality PDF, readable on any device — phone, tablet, laptop, or e-reader.' },
-        { question: 'Do you offer refunds?',                    answer: 'Yes. If you are not satisfied within 30 days of purchase, contact us for a full refund, no questions asked.' },
+        { question: 'How do I receive the guide?',               answer: 'Immediately after payment you will be redirected to download your PDF.' },
+        { question: 'Is this guide current?',                    answer: 'Yes — updated for 2024/2025 with the latest pricing, regulations, and vendor recommendations.' },
+        { question: 'What format is the guide?',                answer: 'A high-quality PDF, readable on any device — phone, tablet, laptop, or e-reader.' },
+        { question: 'Do you offer refunds?',                     answer: 'Yes. If you are not satisfied within 30 days of purchase, contact us for a full refund, no questions asked.' },
         { question: 'Is buying as a foreigner in Turkey legal?', answer: 'Yes — with the right paperwork. The guide covers exactly what documents you need for every category.' }
       ]
     },
@@ -148,6 +179,8 @@ async function initDb() {
       ON CONFLICT DO NOTHING
     `;
   }
+
+  console.log('[TurkeyGuide] DB ready');
 }
 
 module.exports = { sql, initDb };
