@@ -1,12 +1,12 @@
 const express    = require('express');
 const router     = express.Router();
 const bcrypt     = require('bcryptjs');
+const multer     = require('multer');
 const csurf      = require('csurf');
 const rateLimit  = require('express-rate-limit');
 const path       = require('path');
 const fs         = require('fs');
-const { handleUpload } = require('@vercel/blob/client');
-const { del }    = require('@vercel/blob');
+const { put, del } = require('@vercel/blob');
 
 const { sql }    = require('../database');
 const { requireAuth, signAdminToken, COOKIE_NAME } = require('../middleware/auth');
@@ -22,6 +22,16 @@ const loginLimiter = rateLimit({
 
 const VALID_SECTIONS = ['hero', 'stats', 'chapters', 'bonus_topics', 'testimonials', 'purchase_card', 'faq', 'footer'];
 
+// Multer — memory storage, 4.5 MB cap (Vercel serverless request body limit)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 4.5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype === 'application/pdf') cb(null, true);
+    else cb(new Error('Only PDF files are allowed.'));
+  }
+});
+
 // ── Helper: inject <script> into HTML ─────────────────────────────────────────
 function injectIntoHtml(htmlPath, scriptTag) {
   let html = fs.readFileSync(htmlPath, 'utf8');
@@ -31,9 +41,7 @@ function injectIntoHtml(htmlPath, scriptTag) {
 
 // ── GET /admin/login ──────────────────────────────────────────────────────────
 router.get('/login', csrfProtection, (req, res) => {
-  // If already logged in via valid JWT cookie, redirect to dashboard
-  const { requireAuth: _check, ...rest } = require('../middleware/auth');
-  const jwt = require('jsonwebtoken');
+  const jwt   = require('jsonwebtoken');
   const token = req.cookies && req.cookies[COOKIE_NAME];
   if (token) {
     try {
@@ -41,7 +49,6 @@ router.get('/login', csrfProtection, (req, res) => {
       return res.redirect('/admin');
     } catch {}
   }
-
   const html = injectIntoHtml(
     path.join(__dirname, '../public/admin/login.html'),
     `<script>window.__CSRF__ = "${req.csrfToken()}";</script>`
@@ -62,7 +69,7 @@ router.post('/login', loginLimiter, csrfProtection, async (req, res) => {
     httpOnly: true,
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
-    maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    maxAge: 7 * 24 * 60 * 60 * 1000
   });
   res.redirect('/admin');
 });
@@ -73,53 +80,7 @@ router.get('/logout', (req, res) => {
   res.redirect('/admin/login');
 });
 
-// ── Book upload (Vercel Blob client upload) ───────────────────────────────────
-// Placed BEFORE requireAuth middleware — auth is verified manually inside
-// onBeforeGenerateToken so the Vercel callback can hit onUploadCompleted freely.
-router.post('/book/upload', express.json(), async (req, res) => {
-  try {
-    const jsonResponse = await handleUpload({
-      body: req.body,
-      request: req,
-      onBeforeGenerateToken: async (pathname) => {
-        // Verify admin JWT for the token-generation leg
-        const jwt = require('jsonwebtoken');
-        const adminToken = req.cookies && req.cookies[COOKIE_NAME];
-        if (!adminToken) throw new Error('Not authenticated');
-        jwt.verify(adminToken, process.env.JWT_SECRET || 'dev-jwt-secret-change-in-production');
-
-        return {
-          allowedContentTypes: ['application/pdf'],
-          maximumSizeInBytes: 100 * 1024 * 1024, // 100 MB
-          addRandomSuffix: true,
-        };
-      },
-      onUploadCompleted: async ({ blob }) => {
-        // Delete old blob if it exists and is different
-        const [existing] = await sql`SELECT file_path FROM book WHERE id = 1`;
-        if (existing?.file_path && existing.file_path !== blob.url) {
-          try { await del(existing.file_path); } catch {}
-        }
-        const originalName = blob.pathname.split('/').pop();
-        await sql`
-          UPDATE book SET
-            filename      = ${blob.pathname},
-            original_name = ${originalName},
-            file_path     = ${blob.url},
-            file_size     = ${blob.size || 0},
-            uploaded_at   = NOW()
-          WHERE id = 1
-        `;
-      },
-    });
-    return res.json(jsonResponse);
-  } catch (err) {
-    console.error('Book upload error:', err.message);
-    return res.status(400).json({ success: false, error: err.message });
-  }
-});
-
-// ── All routes below require authentication ───────────────────────────────────
+// ── All routes below require authentication + CSRF ────────────────────────────
 router.use(requireAuth);
 router.use(csrfProtection);
 
@@ -187,6 +148,62 @@ router.post('/content/:key', async (req, res) => {
   }
 });
 
+// ── POST /admin/book/upload ───────────────────────────────────────────────────
+// multer runs inside the handler so csurf (checking X-CSRF-Token header) fires
+// before multer parses the multipart body — correct order.
+router.post('/book/upload', (req, res) => {
+  upload.single('book')(req, res, async (err) => {
+    if (err) return res.status(400).json({ success: false, error: err.message });
+    if (!req.file) return res.status(400).json({ success: false, error: 'No file uploaded.' });
+
+    // Magic-byte check: must start with %PDF
+    if (req.file.buffer.slice(0, 4).toString('ascii') !== '%PDF') {
+      return res.status(400).json({ success: false, error: 'File is not a valid PDF.' });
+    }
+
+    if (!process.env.BLOB_READ_WRITE_TOKEN) {
+      return res.status(500).json({
+        success: false,
+        error: 'BLOB_READ_WRITE_TOKEN is not set. Add it in Vercel → Settings → Environment Variables.'
+      });
+    }
+
+    try {
+      // Remove previous blob if one exists
+      const [existing] = await sql`SELECT file_path FROM book WHERE id = 1`;
+      if (existing?.file_path) {
+        try { await del(existing.file_path); } catch {}
+      }
+
+      const blobName = `books/${Date.now()}-${req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+      const blob = await put(blobName, req.file.buffer, {
+        access: 'public',
+        contentType: 'application/pdf',
+        addRandomSuffix: true,
+        token: process.env.BLOB_READ_WRITE_TOKEN,
+      });
+
+      await sql`
+        UPDATE book SET
+          filename      = ${blob.pathname},
+          original_name = ${req.file.originalname},
+          file_path     = ${blob.url},
+          file_size     = ${req.file.size},
+          uploaded_at   = NOW()
+        WHERE id = 1
+      `;
+
+      res.json({
+        success: true,
+        file: { filename: blob.pathname, originalName: req.file.originalname, fileSize: req.file.size }
+      });
+    } catch (uploadErr) {
+      console.error('Blob upload error:', uploadErr.message);
+      res.status(500).json({ success: false, error: 'Upload failed: ' + uploadErr.message });
+    }
+  });
+});
+
 // ── GET /admin/book/status ────────────────────────────────────────────────────
 router.get('/book/status', async (req, res) => {
   const [book] = await sql`SELECT filename, original_name, file_size, uploaded_at FROM book WHERE id = 1`;
@@ -205,7 +222,9 @@ router.get('/book/status', async (req, res) => {
 router.delete('/book', async (req, res) => {
   const [book] = await sql`SELECT file_path FROM book WHERE id = 1`;
   if (book?.file_path) {
-    try { await del(book.file_path); } catch (e) { console.warn('Blob delete failed:', e.message); }
+    try { await del(book.file_path, { token: process.env.BLOB_READ_WRITE_TOKEN }); } catch (e) {
+      console.warn('Blob delete failed:', e.message);
+    }
   }
   await sql`UPDATE book SET filename = NULL, original_name = NULL, file_path = NULL, file_size = NULL, uploaded_at = NULL WHERE id = 1`;
   res.json({ success: true });
