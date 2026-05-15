@@ -8,15 +8,30 @@ const path       = require('path');
 
 // Run DB migrations + seeds (promise — resolves before first request via middleware)
 const { initDb } = require('./database');
+
+let _initError = null;
 const dbReady = initDb().catch(err => {
-  console.error('DB init failed:', err.message);
-  process.exit(1);
+  _initError = err;
+  console.error('[TurkeyGuide] DB init failed:', err.message);
+  console.error('[TurkeyGuide] Stack:', err.stack);
 });
 
 const app = express();
 
-// Block all requests until the DB is ready (only matters on cold start)
-app.use((req, res, next) => dbReady.then(() => next()).catch(next));
+// Block all requests until the DB is ready; surface init errors instead of crashing
+app.use((req, res, next) => {
+  dbReady.then(() => {
+    if (_initError) {
+      console.error('[TurkeyGuide] Rejecting request — DB init error:', _initError.message);
+      return res.status(500).send(
+        `<pre>DB initialisation failed: ${_initError.message}\n\n` +
+        `Check that DATABASE_URL is set correctly in Vercel → Settings → Environment Variables.\n` +
+        `URL must NOT contain channel_binding=require.</pre>`
+      );
+    }
+    next();
+  }).catch(next);
+});
 
 // ── Security headers ──────────────────────────────────────────────────────────
 app.use(helmet({
