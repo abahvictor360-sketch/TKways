@@ -1,5 +1,5 @@
-const { Pool } = require('pg');
-const bcrypt    = require('bcryptjs');
+const { neon } = require('@neondatabase/serverless');
+const bcrypt   = require('bcryptjs');
 
 if (!process.env.DATABASE_URL) {
   throw new Error(
@@ -8,41 +8,12 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
-// Single pool — reused across warm invocations; max:1 keeps serverless
-// connection count low while Neon's pooler handles concurrency externally.
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-  max: 1,
-  idleTimeoutMillis:    10_000,
-  connectionTimeoutMillis: 5_000,
-});
+// neon() uses Neon's HTTP SQL API — no TCP sockets, no connection pool,
+// handles auto-resume transparently. Requires the DIRECT endpoint URL
+// (without -pooler in the hostname).
+const sql = neon(process.env.DATABASE_URL);
 
-pool.on('error', err => console.error('[pg] idle client error:', err.message));
-
-// ── sql tagged-template helper ────────────────────────────────────────────────
-// Returns rows[] directly — identical surface API to @neondatabase/serverless
-// so every route file works unchanged.
-//
-//   const [row]  = await sql`SELECT * FROM tbl WHERE id = ${id}`;
-//   const rows   = await sql`SELECT * FROM tbl`;
-//   await sql`INSERT INTO tbl (a) VALUES (${v})`;
-//
-async function sql(strings, ...values) {
-  let text   = '';
-  const params = [];
-  strings.forEach((str, i) => {
-    text += str;
-    if (i < values.length) {
-      params.push(values[i]);
-      text += `$${params.length}`;
-    }
-  });
-  const { rows } = await pool.query(text, params);
-  return rows;
-}
-
-// ── Schema + seeds (idempotent — safe to run on every cold start) ─────────────
+// ── Schema + seeds (idempotent — safe on every cold start) ───────────────────
 async function initDb() {
   await sql`
     CREATE TABLE IF NOT EXISTS site_content (
