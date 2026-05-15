@@ -1,19 +1,26 @@
-const { createPool } = require('@vercel/postgres');
+const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
 
-// Supports Vercel Postgres (POSTGRES_URL, set automatically when you create
-// a Vercel Storage → Postgres store) or a custom DATABASE_URL as fallback.
+// Vercel Postgres sets POSTGRES_URL automatically when you link a Postgres store.
+// Fall back to DATABASE_URL for local dev / other platforms.
 const dbUrl = process.env.POSTGRES_URL || process.env.DATABASE_URL;
 
 if (!dbUrl) {
   throw new Error(
     'No database URL found. ' +
-    'Create a Postgres store in Vercel Dashboard → Storage, ' +
+    'Link a Vercel Postgres store in the Vercel Dashboard → Storage, ' +
     'or set DATABASE_URL in Environment Variables.'
   );
 }
 
-const pool = createPool({ connectionString: dbUrl });
+// max:1 keeps us inside Vercel's serverless connection limits.
+const pool = new Pool({
+  connectionString: dbUrl,
+  ssl: { rejectUnauthorized: false },
+  max: 1,
+  idleTimeoutMillis: 10000,
+  connectionTimeoutMillis: 10000,
+});
 
 // Tagged-template SQL helper — returns rows[] directly so all route files
 // work unchanged: const [row] = await sql`SELECT ...`
