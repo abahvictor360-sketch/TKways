@@ -1,17 +1,35 @@
-const { neon } = require('@neondatabase/serverless');
-const bcrypt   = require('bcryptjs');
+const { createPool } = require('@vercel/postgres');
+const bcrypt = require('bcryptjs');
 
-if (!process.env.DATABASE_URL) {
+// Supports Vercel Postgres (POSTGRES_URL, set automatically when you create
+// a Vercel Storage → Postgres store) or a custom DATABASE_URL as fallback.
+const dbUrl = process.env.POSTGRES_URL || process.env.DATABASE_URL;
+
+if (!dbUrl) {
   throw new Error(
-    'DATABASE_URL is not set. ' +
-    'Add it in Vercel → Settings → Environment Variables.'
+    'No database URL found. ' +
+    'Create a Postgres store in Vercel Dashboard → Storage, ' +
+    'or set DATABASE_URL in Environment Variables.'
   );
 }
 
-// neon() uses Neon's HTTP SQL API — no TCP sockets, no connection pool,
-// handles auto-resume transparently. Requires the DIRECT endpoint URL
-// (without -pooler in the hostname).
-const sql = neon(process.env.DATABASE_URL);
+const pool = createPool({ connectionString: dbUrl });
+
+// Tagged-template SQL helper — returns rows[] directly so all route files
+// work unchanged: const [row] = await sql`SELECT ...`
+async function sql(strings, ...values) {
+  let text   = '';
+  const params = [];
+  strings.forEach((str, i) => {
+    text += str;
+    if (i < values.length) {
+      params.push(values[i]);
+      text += `$${params.length}`;
+    }
+  });
+  const { rows } = await pool.query(text, params);
+  return rows;
+}
 
 // ── Schema + seeds (idempotent — safe on every cold start) ───────────────────
 async function initDb() {
@@ -65,8 +83,7 @@ async function initDb() {
     )
   `;
 
-  // ── Seeds ────────────────────────────────────────────────────────────────
-
+  // Seeds
   const [{ count }] = await sql`SELECT COUNT(*)::int AS count FROM admin_users`;
   if (Number(count) === 0) {
     const hash = bcrypt.hashSync('changeme123', 10);
@@ -80,9 +97,7 @@ async function initDb() {
     hero: {
       headline: 'The Ultimate Guide to Buying in Turkey',
       subheadline: 'Everything you need to know — real estate, carpets, gold, electronics, and more — from a local expert.',
-      price: '19.99',
-      original_price: '39.99',
-      cta_text: 'Get the Guide Now'
+      price: '19.99', original_price: '39.99', cta_text: 'Get the Guide Now'
     },
     stats: {
       items: [
@@ -118,12 +133,9 @@ async function initDb() {
       title: 'Get Instant Access',
       subtitle: 'One-time payment. Immediate PDF download.',
       features: [
-        'Complete 200+ page PDF guide',
-        'Lifetime access — yours to keep',
-        'All product categories covered',
-        'Trusted vendor directory',
-        'Negotiation phrase guide',
-        '30-day money-back guarantee'
+        'Complete 200+ page PDF guide', 'Lifetime access — yours to keep',
+        'All product categories covered', 'Trusted vendor directory',
+        'Negotiation phrase guide', '30-day money-back guarantee'
       ]
     },
     faq: {
@@ -136,10 +148,8 @@ async function initDb() {
       ]
     },
     footer: {
-      brand_name: 'TurkeyGuide',
-      tagline: 'Your trusted companion for buying in Turkey.',
-      email: 'support@turkeyguide.com',
-      copyright: '© 2025 TurkeyGuide. All rights reserved.'
+      brand_name: 'TurkeyGuide', tagline: 'Your trusted companion for buying in Turkey.',
+      email: 'support@turkeyguide.com', copyright: '© 2025 TurkeyGuide. All rights reserved.'
     }
   };
 
