@@ -287,26 +287,6 @@
         if (progressWrap) progressWrap.style.display = 'flex';
 
         try {
-          // First: verify the server can issue a blob token (surfaces config errors clearly)
-          const preCheck = await fetch('/admin/book/upload', {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({
-              type:    'blob.generate-client-token',
-              payload: {
-                pathname:    `books/${Date.now()}-check`,
-                callbackUrl: location.origin + '/admin/book/upload',
-                multipart:   false,
-                clientPayload: file.name,
-              },
-            }),
-          });
-
-          if (!preCheck.ok) {
-            const errData = await preCheck.json().catch(() => ({}));
-            throw new Error(errData.error || `Server error ${preCheck.status} — check Vercel environment variables.`);
-          }
-
           // Dynamically load @vercel/blob client library (bundled ESM from CDN)
           let blobClient;
           try {
