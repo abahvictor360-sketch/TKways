@@ -1,16 +1,16 @@
-const db = require('../database');
+const { sql } = require('../database');
 
 // Handles POST /webhook/stripe
 // Registered in server.js with express.raw() BEFORE express.json() is applied globally
 module.exports = async function stripeWebhook(req, res) {
-  const payment = db.prepare('SELECT stripe_webhook_secret, stripe_secret_key FROM payment_settings WHERE id = 1').get();
-  if (!payment || !payment.stripe_secret_key) {
+  const [payment] = await sql`SELECT stripe_webhook_secret, stripe_secret_key FROM payment_settings WHERE id = 1`;
+  if (!payment?.stripe_secret_key) {
     return res.sendStatus(200);
   }
 
   const Stripe = require('stripe');
   const stripe = Stripe(payment.stripe_secret_key);
-  const sig = req.headers['stripe-signature'];
+  const sig    = req.headers['stripe-signature'];
 
   let event;
   try {

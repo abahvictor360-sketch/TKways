@@ -250,17 +250,14 @@
       }
     }
 
-    // Upload form
+    // Upload form — uses Vercel Blob client upload (bypasses 4.5 MB proxy limit)
     const uploadForm = document.getElementById('uploadForm');
     if (uploadForm) {
-      uploadForm.addEventListener('submit', e => {
+      uploadForm.addEventListener('submit', async e => {
         e.preventDefault();
         const fileInput = document.getElementById('bookFile');
-        if (!fileInput?.files[0]) return;
-
-        const fd = new FormData();
-        fd.append('book', fileInput.files[0]);
-        fd.append('_csrf', CSRF);
+        const file = fileInput?.files[0];
+        if (!file) return;
 
         const progressWrap  = document.getElementById('uploadProgress');
         const progressFill  = document.getElementById('progressFill');
@@ -270,39 +267,26 @@
         setLoading(btn, true, 'Uploading…');
         if (progressWrap) progressWrap.style.display = 'flex';
 
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', '/admin/book/upload');
-        xhr.setRequestHeader('X-CSRF-Token', CSRF);
-
-        xhr.upload.addEventListener('progress', ev => {
-          if (!ev.lengthComputable) return;
-          const pct = Math.round((ev.loaded / ev.total) * 100);
-          if (progressFill)  progressFill.style.width  = pct + '%';
-          if (progressLabel) progressLabel.textContent = pct + '%';
-        });
-
-        xhr.onload = () => {
-          try {
-            const data = JSON.parse(xhr.responseText);
-            if (data.success) {
-              toast('Book uploaded successfully!', 'success');
-              setTimeout(() => location.reload(), 900);
-            } else {
-              toast('Upload failed: ' + data.error, 'error');
-              setLoading(btn, false);
-              if (progressWrap) progressWrap.style.display = 'none';
-            }
-          } catch {
-            toast('Unexpected response. Please try again.', 'error');
-            setLoading(btn, false);
-          }
-        };
-        xhr.onerror = () => {
-          toast('Network error. Please try again.', 'error');
+        try {
+          // Dynamically load the Vercel Blob client (ESM, < 20 kB)
+          const { upload } = await import('https://esm.sh/@vercel/blob/client');
+          await upload(file.name, file, {
+            access: 'public',
+            handleUploadUrl: '/admin/book/upload',
+            multipart: true,
+            onUploadProgress: ({ percentage }) => {
+              const pct = Math.round(percentage);
+              if (progressFill)  progressFill.style.width  = pct + '%';
+              if (progressLabel) progressLabel.textContent = pct + '%';
+            },
+          });
+          toast('Book uploaded successfully!', 'success');
+          setTimeout(() => location.reload(), 900);
+        } catch (err) {
+          toast('Upload failed: ' + (err.message || 'Unknown error'), 'error');
           setLoading(btn, false);
           if (progressWrap) progressWrap.style.display = 'none';
-        };
-        xhr.send(fd);
+        }
       });
     }
 

@@ -1,32 +1,40 @@
 require('dotenv').config();
-const express = require('express');
-const helmet = require('helmet');
-const session = require('express-session');
-const cookieParser = require('cookie-parser');
-const rateLimit = require('express-rate-limit');
-const path = require('path');
 
-// Run DB migrations + seeds on startup
-require('./database');
+const express    = require('express');
+const helmet     = require('helmet');
+const cookieParser = require('cookie-parser');
+const rateLimit  = require('express-rate-limit');
+const path       = require('path');
+
+// Run DB migrations + seeds (promise — resolves before first request via middleware)
+const { initDb } = require('./database');
+const dbReady = initDb().catch(err => {
+  console.error('DB init failed:', err.message);
+  process.exit(1);
+});
 
 const app = express();
+
+// Block all requests until the DB is ready (only matters on cold start)
+app.use((req, res, next) => dbReady.then(() => next()).catch(next));
 
 // ── Security headers ──────────────────────────────────────────────────────────
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc:  ["'self'", "https://js.stripe.com", "'unsafe-inline'"],
+      scriptSrc:  ["'self'", "https://js.stripe.com", "https://esm.sh", "'unsafe-inline'"],
       styleSrc:   ["'self'", "https://fonts.googleapis.com", "'unsafe-inline'"],
       fontSrc:    ["'self'", "https://fonts.gstatic.com"],
       frameSrc:   ["https://js.stripe.com"],
-      connectSrc: ["'self'", "https://api.stripe.com"],
-      imgSrc:     ["'self'", "data:", "https:"]
+      connectSrc: ["'self'", "https://api.stripe.com", "https://esm.sh"],
+      imgSrc:     ["'self'", "data:", "https:"],
+      workerSrc:  ["blob:"]
     }
   }
 }));
 
-// ── Stripe webhook MUST be before express.json() (needs raw body) ─────────────
+// ── Stripe webhook MUST be before express.json() ──────────────────────────────
 const stripeWebhook = require('./routes/webhook');
 app.post('/webhook/stripe', express.raw({ type: 'application/json' }), stripeWebhook);
 
@@ -34,18 +42,6 @@ app.post('/webhook/stripe', express.raw({ type: 'application/json' }), stripeWeb
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
-
-// ── Session ───────────────────────────────────────────────────────────────────
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'fallback-dev-secret-change-in-production',
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production'
-  }
-}));
 
 // ── Static files ──────────────────────────────────────────────────────────────
 app.use(express.static(path.join(__dirname, 'public')));
@@ -83,9 +79,15 @@ app.use((err, req, res, next) => {
 
 app.use((req, res) => res.status(404).send('Not found.'));
 
-// ── Start ─────────────────────────────────────────────────────────────────────
+// ── Start (local dev) / Export (Vercel) ───────────────────────────────────────
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`TurkeyGuide running  → http://localhost:${PORT}`);
-  console.log(`Admin panel          → http://localhost:${PORT}/admin/login`);
-});
+if (process.env.NODE_ENV !== 'production') {
+  dbReady.then(() => {
+    app.listen(PORT, () => {
+      console.log(`TurkeyGuide running  → http://localhost:${PORT}`);
+      console.log(`Admin panel          → http://localhost:${PORT}/admin/login`);
+    });
+  });
+}
+
+module.exports = app;
