@@ -5,161 +5,221 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Admin Dashboard — TurkeyGuide</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/assets/admin.css">
   <!-- window.__ADMIN_DATA__ and window.__CSRF_TOKEN__ injected here by server -->
 </head>
 <body class="admin-page">
 
-  <div class="admin-layout">
+<!-- Mobile sidebar toggle -->
+<button class="sidebar-toggle" id="sidebarToggle" aria-label="Open menu" aria-expanded="false" aria-controls="sidebar">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+</button>
 
-    <!-- Sidebar -->
-    <aside class="sidebar">
-      <div class="sidebar-brand">
-        <span>🇹🇷</span>
-        <span class="brand-name">TurkeyGuide</span>
+<!-- Mobile overlay -->
+<div class="sidebar-overlay" id="sidebarOverlay" aria-hidden="true"></div>
+
+<div class="admin-layout">
+
+  <!-- ── Sidebar ──────────────────────────────────────────────────────────── -->
+  <aside class="sidebar" id="sidebar" role="navigation" aria-label="Admin navigation">
+    <div class="sidebar-top">
+      <div class="sidebar-logo" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
       </div>
-      <nav class="sidebar-nav">
-        <a href="#" class="nav-item active" data-tab="overview">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-          Overview
-        </a>
-        <a href="#" class="nav-item" data-tab="content">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-          Content Editor
-        </a>
-        <a href="#" class="nav-item" data-tab="book">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
-          Book Upload
-        </a>
-        <a href="#" class="nav-item" data-tab="payment">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
-          Payment Settings
-        </a>
-        <a href="#" class="nav-item" data-tab="password">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
-          Change Password
-        </a>
-      </nav>
-      <div class="sidebar-footer">
-        <span id="adminUsername"></span>
-        <a href="/admin/logout" class="logout-link">Sign out</a>
+      <div>
+        <div class="sidebar-brand">TurkeyGuide</div>
+        <div class="sidebar-version">Admin v1.0</div>
       </div>
-    </aside>
+      <button class="sidebar-close" id="sidebarClose" aria-label="Close menu">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
 
-    <!-- Main content -->
-    <main class="admin-main">
+    <nav class="sidebar-nav">
+      <div class="nav-section-label">Main</div>
+      <a href="#" class="nav-item active" data-tab="overview" role="button" tabindex="0">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        Overview
+      </a>
+      <a href="#" class="nav-item" data-tab="content" role="button" tabindex="0">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        Content Editor
+      </a>
+      <div class="nav-section-label">Store</div>
+      <a href="#" class="nav-item" data-tab="book" role="button" tabindex="0">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+        Book Upload
+      </a>
+      <a href="#" class="nav-item" data-tab="payment" role="button" tabindex="0">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+        Payment Settings
+      </a>
+      <div class="nav-section-label">Account</div>
+      <a href="#" class="nav-item" data-tab="password" role="button" tabindex="0">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+        Change Password
+      </a>
+    </nav>
 
-      <!-- ── Overview ─────────────────────────────────────────────────────── -->
+    <div class="sidebar-footer">
+      <div class="footer-avatar" id="footerAvatarInitial" aria-hidden="true">A</div>
+      <span class="footer-username" id="footerUsername">admin</span>
+      <a href="/admin/logout" class="logout-btn" title="Sign out" aria-label="Sign out">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      </a>
+    </div>
+  </aside>
+
+  <!-- ── Main ─────────────────────────────────────────────────────────────── -->
+  <main class="admin-main" id="adminMain">
+    <div class="admin-topbar">
+      <span class="admin-topbar-title" id="topbarTitle">Overview</span>
+      <div class="admin-topbar-actions">
+        <a href="/" target="_blank" rel="noopener noreferrer" class="btn-secondary" style="font-size:.8rem;padding:.4rem .85rem">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          View Site
+        </a>
+      </div>
+    </div>
+
+    <div class="admin-content">
+
+      <!-- Overview -->
       <div class="tab-panel active" id="tab-overview">
-        <div class="page-header">
-          <h2>Overview</h2>
-          <a href="/" target="_blank" class="btn-secondary btn-sm">View Site ↗</a>
-        </div>
-        <div class="overview-cards" id="overviewCards"></div>
+        <div class="page-header"><h2>Overview</h2></div>
+        <p class="page-desc">Your store at a glance.</p>
+        <div class="overview-grid" id="overviewCards"></div>
+        <div class="quick-actions" id="quickActions"></div>
       </div>
 
-      <!-- ── Content Editor ──────────────────────────────────────────────── -->
+      <!-- Content Editor -->
       <div class="tab-panel" id="tab-content">
         <div class="page-header"><h2>Content Editor</h2></div>
-        <p class="page-desc">Changes save immediately and appear on the live site.</p>
+        <p class="page-desc">All changes are saved instantly and appear on the live site.</p>
         <div id="contentEditor"></div>
       </div>
 
-      <!-- ── Book Upload ─────────────────────────────────────────────────── -->
+      <!-- Book Upload -->
       <div class="tab-panel" id="tab-book">
         <div class="page-header"><h2>Book Upload</h2></div>
-        <div id="bookStatus" class="info-card"></div>
-
-        <div class="card mt-2">
-          <h3>Upload New Book</h3>
-          <p class="card-desc">PDF only, max 100MB. Replaces the current file.</p>
+        <div id="bookStatus" class="info-card no-book" style="margin-bottom:1.2rem">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          No book uploaded yet.
+        </div>
+        <div class="card">
+          <p class="card-title">Upload PDF</p>
+          <p class="card-desc">PDF only · Max 100 MB · Replaces the current file.</p>
           <form id="uploadForm" enctype="multipart/form-data">
             <div class="form-group">
-              <label>PDF File</label>
-              <input type="file" name="book" accept=".pdf,application/pdf" required id="bookFile">
+              <label class="form-label" for="bookFile">Select file</label>
+              <input type="file" name="book" id="bookFile" class="form-file" accept=".pdf,application/pdf" required>
             </div>
             <div class="progress-wrap" id="uploadProgress" style="display:none">
               <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
-              <span id="progressLabel">0%</span>
+              <span class="progress-label" id="progressLabel">0%</span>
             </div>
-            <button type="submit" class="btn-primary mt-1">Upload PDF</button>
+            <button type="submit" class="btn-primary mt-1">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg>
+              Upload Book
+            </button>
           </form>
         </div>
-
         <div class="card mt-2" id="deleteBookCard" style="display:none">
-          <h3>Remove Book</h3>
-          <p class="card-desc">This will delete the file and disable purchases until a new file is uploaded.</p>
-          <button class="btn-danger" id="deleteBookBtn">Delete Book File</button>
+          <p class="card-title">Remove Book</p>
+          <p class="card-desc">Deletes the file and disables purchases until a new file is uploaded.</p>
+          <button class="btn-danger" id="deleteBookBtn">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
+            Delete Book File
+          </button>
         </div>
       </div>
 
-      <!-- ── Payment Settings ────────────────────────────────────────────── -->
+      <!-- Payment Settings -->
       <div class="tab-panel" id="tab-payment">
         <div class="page-header"><h2>Payment Settings</h2></div>
         <div class="card">
+          <p class="card-title">Stripe Configuration</p>
+          <p class="card-desc">Enter your Stripe API keys. Changes take effect immediately.</p>
           <form id="paymentForm">
             <div class="form-group">
-              <label>Stripe Publishable Key <span class="label-hint">(starts with pk_)</span></label>
-              <input type="text" name="stripe_publishable_key" id="pubKeyInput" placeholder="pk_test_…">
+              <label class="form-label" for="pubKeyInput">
+                Publishable Key <span class="form-hint">(starts with pk_)</span>
+              </label>
+              <input type="text" id="pubKeyInput" name="stripe_publishable_key" class="form-input" placeholder="pk_live_…" autocomplete="off" spellcheck="false">
             </div>
             <div class="form-group">
-              <label>Stripe Secret Key <span class="label-hint">(starts with sk_)</span></label>
-              <input type="password" name="stripe_secret_key" id="secKeyInput" placeholder="sk_test_… (leave blank to keep current)">
+              <label class="form-label" for="secKeyInput">
+                Secret Key <span class="form-hint">(starts with sk_ — leave blank to keep current)</span>
+              </label>
+              <input type="password" id="secKeyInput" name="stripe_secret_key" class="form-input" placeholder="sk_live_…" autocomplete="off">
             </div>
             <div class="form-group">
-              <label>Webhook Secret <span class="label-hint">(starts with whsec_)</span></label>
-              <input type="password" name="stripe_webhook_secret" id="whInput" placeholder="whsec_… (leave blank to keep current)">
+              <label class="form-label" for="whInput">
+                Webhook Secret <span class="form-hint">(starts with whsec_ — leave blank to keep current)</span>
+              </label>
+              <input type="password" id="whInput" name="stripe_webhook_secret" class="form-input" placeholder="whsec_…" autocomplete="off">
             </div>
             <div class="form-row">
               <div class="form-group">
-                <label>Product Name</label>
-                <input type="text" name="product_name" id="productNameInput">
+                <label class="form-label" for="productNameInput">Product Name</label>
+                <input type="text" id="productNameInput" name="product_name" class="form-input" placeholder="Turkey Buying Guide">
               </div>
               <div class="form-group">
-                <label>Price (USD cents) <span class="label-hint">e.g. 1999 = $19.99</span></label>
-                <input type="number" name="price_usd_cents" id="priceInput" min="100">
+                <label class="form-label" for="priceInput">
+                  Price <span class="form-hint">(cents, e.g. 1999 = $19.99)</span>
+                </label>
+                <input type="number" id="priceInput" name="price_usd_cents" class="form-input" min="100" placeholder="1999">
               </div>
             </div>
-            <div id="stripeStatus" class="status-badge" style="display:none"></div>
-            <button type="submit" class="btn-primary mt-1">Save Payment Settings</button>
+            <div id="stripeStatus" style="display:none"></div>
+            <button type="submit" class="btn-primary mt-1">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+              Save Settings
+            </button>
           </form>
         </div>
         <div class="card mt-2">
-          <h3>Webhook Setup</h3>
-          <p class="card-desc">Add this endpoint in your <a href="https://dashboard.stripe.com/webhooks" target="_blank">Stripe dashboard</a>:</p>
+          <p class="card-title">Webhook Endpoint</p>
+          <p class="card-desc">Add this URL in your <a href="https://dashboard.stripe.com/webhooks" target="_blank" rel="noopener" style="color:var(--gold)">Stripe Dashboard → Webhooks</a>. Listen for: <strong>checkout.session.completed</strong></p>
           <code class="code-block" id="webhookUrl"></code>
-          <p class="card-desc mt-1">Listen for: <strong>checkout.session.completed</strong></p>
         </div>
       </div>
 
-      <!-- ── Change Password ─────────────────────────────────────────────── -->
+      <!-- Change Password -->
       <div class="tab-panel" id="tab-password">
         <div class="page-header"><h2>Change Password</h2></div>
         <div class="card" style="max-width:480px">
           <form id="passwordForm">
             <div class="form-group">
-              <label>Current Password</label>
-              <input type="password" name="current_password" required autocomplete="current-password">
+              <label class="form-label" for="curPwd">Current Password</label>
+              <input type="password" id="curPwd" name="current_password" class="form-input" required autocomplete="current-password">
             </div>
             <div class="form-group">
-              <label>New Password <span class="label-hint">(min 8 characters)</span></label>
-              <input type="password" name="new_password" required minlength="8" autocomplete="new-password">
+              <label class="form-label" for="newPwd">
+                New Password <span class="form-hint">(min 8 characters)</span>
+              </label>
+              <input type="password" id="newPwd" name="new_password" class="form-input" required minlength="8" autocomplete="new-password">
             </div>
             <div class="form-group">
-              <label>Confirm New Password</label>
-              <input type="password" name="confirm_password" required autocomplete="new-password">
+              <label class="form-label" for="confPwd">Confirm New Password</label>
+              <input type="password" id="confPwd" name="confirm_password" class="form-input" required autocomplete="new-password">
             </div>
-            <button type="submit" class="btn-primary mt-1">Update Password</button>
+            <button type="submit" class="btn-primary mt-1">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+              Update Password
+            </button>
           </form>
         </div>
       </div>
 
-    </main>
-  </div>
+    </div><!-- /admin-content -->
+  </main>
+</div><!-- /admin-layout -->
 
-  <div id="toast" class="toast" aria-live="polite"></div>
+<div id="toast" class="toast" role="alert" aria-live="assertive" aria-atomic="true"></div>
 
-  <script src="/assets/admin.js"></script>
+<script src="/assets/admin.js"></script>
 </body>
 </html>

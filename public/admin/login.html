@@ -5,45 +5,108 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Admin Login — TurkeyGuide</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/assets/admin.css">
   <!-- window.__CSRF__ injected here by server -->
 </head>
 <body class="login-page">
+
+  <!-- Background mesh -->
+  <div class="login-bg" aria-hidden="true">
+    <div class="login-bg-orb login-bg-orb--1"></div>
+    <div class="login-bg-orb login-bg-orb--2"></div>
+  </div>
+
   <div class="login-wrap">
     <div class="login-card">
-      <div class="login-logo">
-        <span class="logo-icon">🇹🇷</span>
-        <h1>TurkeyGuide</h1>
-        <p>Admin Panel</p>
+
+      <!-- Brand -->
+      <div class="login-brand">
+        <div class="login-brand-icon" aria-hidden="true">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+        </div>
+        <div>
+          <h1 class="login-brand-name">TurkeyGuide</h1>
+          <p class="login-brand-sub">Admin Panel</p>
+        </div>
       </div>
 
-      <form method="POST" action="/admin/login" id="loginForm">
+      <p class="login-heading">Welcome back</p>
+      <p class="login-sub">Sign in to manage your store</p>
+
+      <!-- Error alert -->
+      <div id="loginError" class="alert alert--error" role="alert" style="display:none">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        Invalid username or password.
+      </div>
+
+      <form method="POST" action="/admin/login" id="loginForm" novalidate>
         <!--CSRF_TOKEN-->
 
-        <div id="loginError" class="form-error" style="display:none;"></div>
-
-        <div class="form-group">
-          <label for="username">Username</label>
-          <input type="text" id="username" name="username" autocomplete="username" required autofocus>
+        <div class="field">
+          <label class="field-label" for="username">Username</label>
+          <div class="field-wrap">
+            <span class="field-icon" aria-hidden="true">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            </span>
+            <input type="text" id="username" name="username"
+              class="field-input" placeholder="admin"
+              autocomplete="username" required autofocus spellcheck="false">
+          </div>
         </div>
-        <div class="form-group">
-          <label for="password">Password</label>
-          <input type="password" id="password" name="password" autocomplete="current-password" required>
+
+        <div class="field">
+          <label class="field-label" for="password">Password</label>
+          <div class="field-wrap">
+            <span class="field-icon" aria-hidden="true">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+            </span>
+            <input type="password" id="password" name="password"
+              class="field-input" placeholder="••••••••"
+              autocomplete="current-password" required>
+            <button type="button" class="field-toggle" id="togglePwd" aria-label="Show password" tabindex="0">
+              <svg id="eyeIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
         </div>
 
-        <button type="submit" class="btn-primary btn-full">Sign In</button>
+        <button type="submit" class="btn-login" id="submitBtn">
+          <span id="btnText">Sign In</span>
+          <svg id="btnArrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </button>
       </form>
+
+      <p class="login-back">
+        <a href="/" class="login-back-link">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+          Back to store
+        </a>
+      </p>
     </div>
   </div>
 
   <script>
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('error') === 'invalid') {
-      const el = document.getElementById('loginError');
-      el.textContent = 'Invalid username or password.';
-      el.style.display = 'block';
+    // Show error from query param
+    if (new URLSearchParams(location.search).get('error') === 'invalid') {
+      document.getElementById('loginError').style.display = 'flex';
     }
+
+    // Password visibility toggle
+    document.getElementById('togglePwd').addEventListener('click', function() {
+      const inp = document.getElementById('password');
+      const isText = inp.type === 'text';
+      inp.type = isText ? 'password' : 'text';
+      this.setAttribute('aria-label', isText ? 'Show password' : 'Hide password');
+    });
+
+    // Loading state on submit
+    document.getElementById('loginForm').addEventListener('submit', function() {
+      const btn = document.getElementById('submitBtn');
+      document.getElementById('btnText').textContent = 'Signing in…';
+      document.getElementById('btnArrow').style.display = 'none';
+      btn.disabled = true;
+    });
   </script>
 </body>
 </html>
