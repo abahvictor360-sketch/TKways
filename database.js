@@ -1,4 +1,4 @@
-const { Pool } = require('pg');
+const { neon } = require('@neondatabase/serverless');
 const bcrypt = require('bcryptjs');
 
 // Vercel Postgres sets POSTGRES_URL automatically when you link a Postgres store.
@@ -13,30 +13,10 @@ if (!dbUrl) {
   );
 }
 
-// max:1 keeps us inside Vercel's serverless connection limits.
-const pool = new Pool({
-  connectionString: dbUrl,
-  ssl: { rejectUnauthorized: false },
-  max: 1,
-  idleTimeoutMillis: 10000,
-  connectionTimeoutMillis: 10000,
-});
-
-// Tagged-template SQL helper — returns rows[] directly so all route files
-// work unchanged: const [row] = await sql`SELECT ...`
-async function sql(strings, ...values) {
-  let text   = '';
-  const params = [];
-  strings.forEach((str, i) => {
-    text += str;
-    if (i < values.length) {
-      params.push(values[i]);
-      text += `$${params.length}`;
-    }
-  });
-  const { rows } = await pool.query(text, params);
-  return rows;
-}
+// neon() returns a tagged-template SQL function that uses HTTP (not TCP).
+// HTTP has no TCP keep-alive / timeout issues with Neon's auto-pause — it just
+// makes a fresh fetch request for every query, which wakes the DB if needed.
+const sql = neon(dbUrl);
 
 // ── Schema + seeds (idempotent — safe on every cold start) ───────────────────
 async function initDb() {
